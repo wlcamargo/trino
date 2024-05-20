@@ -12,4 +12,3 @@ INSERT INTO  youtube.dbo.CustomerRegistration (CustomerID, Name, Email, Registra
 (2, 'Maria Johnson', 'maria.johnson@example.com', '2023-02-10'),
 (3, 'Carlos Brown', 'carlos.brown@example.com', '2023-03-05');
 
-select * from youtube.dbo.CustomerRegistration

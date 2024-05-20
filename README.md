@@ -12,7 +12,7 @@ This project aims to manage customer data including customer registration, purch
 | Customer Complaints  | Records complaints made by customers, linking them to the corresponding purchase and customer.   |
 
 ## Tutorial 
-Link: 
+Link: https://youtu.be/b5jug57mStg
 
 ## Setup
 ### Database Setup
