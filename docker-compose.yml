@@ -1,0 +1,103 @@
+services:
+  trino:
+    image: trinodb/trino:405
+    container_name: trino
+    hostname: trino
+    ports:
+      - 8080:8080
+    volumes:
+      - ./conf/hive.properties:/etc/trino/catalog/hive.properties
+      - ./conf/delta.properties:/etc/trino/catalog/delta.properties
+      - ./conf/iceberg.properties:/etc/trino/catalog/iceberg.properties
+      - ./conf/postgres.properties:/etc/trino/catalog/postgres.properties
+      - ./conf/sqlserver.properties:/etc/trino/catalog/sqlserver.properties
+    networks:
+      - trino
+    depends_on:
+      - metastore
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  metastore-db:
+    image: wlcamargo/mariadb
+    container_name: metastore-db
+    networks:
+      - trino
+    volumes:
+      - metastore-db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  
+  create-metastore-schema:
+    image: wlcamargo/hive-metastore 
+    container_name: create-metastore-schema
+    depends_on:
+      - metastore-db
+    networks:
+      - trino
+    command: /opt/hive-metastore/bin/schematool --verbose -initSchema -dbType mysql -userName ${MYSQL_ROOT_USER} -passWord ${MYSQL_ROOT_PASSWORD} -url jdbc:mysql://metastore-db:3306/metastore_db?createDatabaseIfNotExist=true
+    restart: "on-failure"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  
+  metastore:
+    image: wlcamargo/hive-metastore
+    container_name: metastore
+    networks:
+      - trino
+    volumes:
+      - ./metastore/metastore-site.xml:/opt/hive-metastore/conf/metastore-site.xml
+      - ./metastore/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    command: /opt/hive-metastore/bin/start-metastore -p 9083
+    depends_on:
+      - create-metastore-schema
+      - metastore-db
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  minio:
+        image: minio/minio:RELEASE.2024-07-16T23-46-41Z-cpuv1
+        container_name: minio
+        networks:
+          - sparkanos
+        ports:
+          - 9000:9000
+          - 9001:9001
+        command: server /data --console-address ":9001"
+        volumes:
+        - minio:/data
+        environment:
+          - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+          - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+        extra_hosts:
+          - "host.docker.internal:host-gateway"
+
+  createbucket:
+      hostname: createbucket
+      container_name: createbucket
+      image: minio/minio:RELEASE.2024-07-16T23-46-41Z-cpuv1
+      depends_on:
+        - minio
+      entrypoint: >
+        /bin/sh -c "
+        /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+        /usr/bin/mc mb myminio/landing;
+        /usr/bin/mc mb myminio/bronze;
+        /usr/bin/mc mb myminio/silver;
+        /usr/bin/mc mb myminio/gold;
+        "
+      networks:
+        - trino
+
+networks:
+  trino:
+
+volumes:
+  metastore-db:
+  minio:
